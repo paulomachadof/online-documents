@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Azure DevOps — Hierarquia de Work Items (RADIX)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f8f6; color: #1a1a1a; padding: 24px; }
+  h1 { font-size: 18px; font-weight: 500; color: #1a1a1a; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 24px; }
+
+  .toggle-row { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .toggle-btn { font-size: 12px; padding: 6px 14px; border-radius: 20px; border: 1px solid #ddd; background: #fff; cursor: pointer; color: #555; transition: all 0.15s; }
+  .toggle-btn.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+
+  .diagram { display: flex; flex-direction: column; gap: 0; }
+  .level-row { display: flex; align-items: stretch; gap: 0; min-height: 72px; }
+  .level-label { width: 64px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 12px; }
+  .level-label span { font-size: 11px; color: #aaa; font-weight: 500; letter-spacing: 0.04em; white-space: nowrap; }
+  .level-content { flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 0; position: relative; }
+  .connector-col { width: 64px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+
+  .node { border-radius: 10px; padding: 10px 16px; cursor: pointer; transition: transform 0.12s, box-shadow 0.12s; position: relative; flex: 1; min-width: 0; }
+  .node:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.10); }
+  .node-title { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+  .node-desc { font-size: 11px; opacity: 0.75; }
+  .node-badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 10px; margin-top: 4px; font-weight: 500; }
+
+  /* Colors */
+  .n-iniciativa { background: #EEEDFE; border: 1px solid #AFA9EC; }
+  .n-iniciativa .node-title { color: #3C3489; }
+  .n-iniciativa .node-badge { background: #CECBF6; color: #26215C; }
+
+  .n-epico { background: #E6F1FB; border: 1px solid #85B7EB; }
+  .n-epico .node-title { color: #0C447C; }
+  .n-epico .node-badge { background: #B5D4F4; color: #042C53; }
+
+  .n-feature-group { background: #E1F5EE; border: 1px solid #5DCAA5; }
+  .n-feature-group .node-title { color: #085041; }
+  .n-feature-group .node-badge { background: #9FE1CB; color: #04342C; }
+
+  .n-feature-comp { background: #E1F5EE; border: 2px dashed #5DCAA5; }
+  .n-feature-comp .node-title { color: #085041; }
+  .n-feature-comp .node-badge { background: #9FE1CB; color: #04342C; }
+
+  .n-pbi { background: #FAECE7; border: 1px solid #F0997B; }
+  .n-pbi .node-title { color: #712B13; }
+  .n-pbi .node-badge { background: #F5C4B3; color: #4A1B0C; }
+
+  .n-task { background: #F1EFE8; border: 1px solid #B4B2A9; }
+  .n-task .node-title { color: #2C2C2A; }
+  .n-task .node-badge { background: #D3D1C7; color: #2C2C2A; }
+
+  .n-open { background: #FEF3DC; border: 2px dashed #EF9F27; }
+  .n-open .node-title { color: #633806; }
+  .n-open .node-badge { background: #FAC775; color: #412402; }
+
+  /* Arrows */
+  .arrow-down { display: flex; justify-content: center; align-items: center; height: 24px; }
+  .arrow-down svg { color: #ccc; }
+
+  .arrow-multi { display: flex; justify-content: space-around; align-items: center; height: 28px; padding: 0 64px; }
+  .arrow-multi svg { color: #ccc; }
+
+  /* Sprint bracket */
+  .sprint-zone { border: 1.5px dashed #ccc; border-radius: 8px; padding: 8px; margin-left: 64px; position: relative; background: #fafaf8; }
+  .sprint-label { position: absolute; top: -10px; left: 12px; background: #fafaf8; font-size: 11px; color: #aaa; padding: 0 6px; font-weight: 500; }
+
+  /* Panel */
+  .detail-panel { margin-top: 20px; background: #fff; border: 1px solid #eee; border-radius: 12px; padding: 16px 20px; font-size: 13px; line-height: 1.6; color: #444; display: none; }
+  .detail-panel.visible { display: block; }
+  .detail-panel h3 { font-size: 14px; font-weight: 500; color: #1a1a1a; margin-bottom: 8px; }
+  .detail-panel ul { padding-left: 16px; }
+  .detail-panel li { margin-bottom: 4px; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-right: 4px; font-weight: 500; }
+  .tag-green { background: #E1F5EE; color: #085041; }
+  .tag-amber { background: #FEF3DC; color: #633806; }
+
+  /* Legend */
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #666; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+  .divider { height: 1px; background: #eee; margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<h1>Azure DevOps — Hierarquia de Work Items</h1>
+<p class="subtitle">Projeto RADIX · Backlog Review 21/05/2026 · Clique nos itens para ver detalhes</p>
+
+<div class="toggle-row">
+  <span style="font-size:12px;color:#888;align-self:center;">Nível 3 (Feature) — opção em discussão:</span>
+  <button class="toggle-btn active" id="btn-a" onclick="setMode('A')">Opção A — Feature = componente individual</button>
+  <button class="toggle-btn" id="btn-b" onclick="setMode('B')">Opção B — Feature = grupo de componentes</button>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#EEEDFE;border:1px solid #AFA9EC"></div>Iniciativa</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#E6F1FB;border:1px solid #85B7EB"></div>Épico</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#E1F5EE;border:1px solid #5DCAA5"></div>Feature</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#FAECE7;border:1px solid #F0997B"></div>PBI</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#F1EFE8;border:1px solid #B4B2A9"></div>Task</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#FEF3DC;border:2px dashed #EF9F27"></div>Em aberto</div>
+</div>
+
+<div class="diagram">
+
+  <!-- N1: Iniciativa -->
+  <div class="level-row">
+    <div class="level-label"><span>NÍVEL 1</span></div>
+    <div class="level-content">
+      <div class="node n-iniciativa" onclick="showDetail('iniciativa')">
+        <div class="node-title">Iniciativa</div>
+        <div class="node-desc">Objetivo estratégico de longo prazo</div>
+        <span class="node-badge">ex: Plataforma de Componentes</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><svg width="16" height="20" viewBox="0 0 16 20" fill="none"><path d="M8 0v16M2 10l6 8 6-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <!-- N2: Épico -->
+  <div class="level-row">
+    <div class="level-label"><span>NÍVEL 2</span></div>
+    <div class="level-content">
+      <div class="node n-epico" onclick="showDetail('epico')">
+        <div class="node-title">Épico — Release / Versão ✅</div>
+        <div class="node-desc">Pacote de entrega com data definida · versionamento v0 → v1 → v2</div>
+        <span class="node-badge">ex: Backend Foundation — Release 1</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><svg width="16" height="20" viewBox="0 0 16 20" fill="none"><path d="M8 0v16M2 10l6 8 6-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <!-- N3: Feature (dinâmico) -->
+  <div class="level-row">
+    <div class="level-label"><span>NÍVEL 3</span></div>
+    <div class="level-content" id="feature-row">
+      <!-- injected by JS -->
+    </div>
+  </div>
+
+  <div class="arrow-multi" id="arrow-mid">
+    <svg width="16" height="20" viewBox="0 0 16 20" fill="none"><path d="M8 0v16M2 10l6 8 6-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <svg width="16" height="20" viewBox="0 0 16 20" fill="none"><path d="M8 0v16M2 10l6 8 6-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <svg width="16" height="20" viewBox="0 0 16 20" fill="none"><path d="M8 0v16M2 10l6 8 6-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- N4: PBI (dinâmico) -->
+  <div class="level-row">
+    <div class="level-label"><span>NÍVEL 4</span></div>
+    <div class="level-content" id="pbi-row">
+      <!-- injected by JS -->
+    </div>
+  </div>
+
+  <!-- Tasks -->
+  <div class="arrow-multi">
+    <svg width="16" height="20" viewBox="0 0 16 20" fill="none"><path d="M8 0v16M2 10l6 8 6-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <svg width="16" height="20" viewBox="0 0 16 20" fill="none"><path d="M8 0v16M2 10l6 8 6-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <svg width="16" height="20" viewBox="0 0 16 20" fill="none"><path d="M8 0v16M2 10l6 8 6-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- N5: Tasks -->
+  <div class="sprint-zone">
+    <span class="sprint-label">⚡ Sprint (efêmero)</span>
+    <div class="level-row" style="min-height:64px">
+      <div class="level-label"><span>NÍVEL 5</span></div>
+      <div class="level-content">
+        <div class="node n-task" onclick="showDetail('task')">
+          <div class="node-title">Task</div>
+          <div class="node-desc">Granularidade máx. 1 dia</div>
+          <span class="node-badge">Implementação</span>
+        </div>
+        <div class="node n-task" onclick="showDetail('task')">
+          <div class="node-title">Task</div>
+          <div class="node-desc">Granularidade máx. 1 dia</div>
+          <span class="node-badge">Testes</span>
+        </div>
+        <div class="node n-task" onclick="showDetail('task')">
+          <div class="node-title">Task</div>
+          <div class="node-desc">Granularidade máx. 1 dia</div>
+          <span class="node-badge">Documentação</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Detail panel -->
+<div class="detail-panel" id="detail-panel">
+  <h3 id="detail-title"></h3>
+  <div id="detail-body"></div>
+</div>
+
+<div class="divider"></div>
+
+<div style="font-size:11px;color:#bbb;text-align:center;">
+  Gerado por Claudia · AI Agent de Requirements Engineering · Backlog Review RADIX 21/05/2026
+</div>
+
+<script>
+const details = {
+  iniciativa: {
+    title: 'Iniciativa — Nível 1',
+    body: `<ul>
+      <li>Container de mais alto nível; agrupa épicos relacionados a um mesmo objetivo estratégico.</li>
+      <li>Não tem sprint — representa um horizonte de longo prazo.</li>
+      <li>Exemplo: "Plataforma de Componentes Reutilizáveis".</li>
+    </ul>`
+  },
+  epico: {
+    title: 'Épico — Nível 2 ✅ Definido',
+    body: `<ul>
+      <li><strong>Decisão da reunião:</strong> Épico = Release / Versão de entrega.</li>
+      <li>Cada Épico representa um pacote com data definida (ex: entrega até junho).</li>
+      <li>Versionamento explícito: <strong>v0 → v1 → v2</strong>. Quando v0 é fechado, cria-se um novo Épico para v1.</li>
+      <li>Backend Foundation e Frontend Foundation são Épicos separados no mesmo release.</li>
+    </ul>`
+  },
+  'feature-a': {
+    title: 'Feature (Opção A) — Feature = Componente individual ⚠️ Em discussão',
+    body: `<ul>
+      <li>Cada Feature representa <strong>um componente específico</strong> (ex: Gauge Chart, Secret Management, Input Field).</li>
+      <li>PBIs dentro da Feature são as entregas técnicas internas (implementação, testes, docs).</li>
+      <li><span class="tag tag-green">Vantagem</span> Rastreabilidade individual de cada componente e seu ciclo de vida.</li>
+      <li><span class="tag tag-amber">Risco</span> Componentes simples como "um tipo de input" ficam granulares demais no nível de Feature.</li>
+    </ul>`
+  },
+  'feature-b': {
+    title: 'Feature (Opção B) — Feature = Grupo/Categoria ⚠️ Em discussão',
+    body: `<ul>
+      <li>Cada Feature agrupa componentes de mesmo tipo (ex: "Charts", "Inputs", "Data Access SDK").</li>
+      <li>PBIs dentro da Feature são os componentes individuais (ex: Gauge Chart v0, Line Chart v0).</li>
+      <li><span class="tag tag-green">Vantagem</span> Mimics a estrutura da equipe de design; catálogo de capacidades mais limpo.</li>
+      <li><span class="tag tag-amber">Risco</span> Perde rastreabilidade individual do ciclo de vida de cada componente.</li>
+      <li><strong>Próximo passo:</strong> aguardar lista de componentes do JP (até 22/05) para decidir.</li>
+    </ul>`
+  },
+  'pbi-a': {
+    title: 'PBI (na Opção A) — Nível 4 ✅ Definido',
+    body: `<ul>
+      <li>PBIs são as entregas técnicas internas de cada Feature/componente.</li>
+      <li>Cada PBI é um incremento concreto e fechável — não fica aberto indefinidamente.</li>
+      <li>Ao concluir, o PBI é fechado. Evoluções futuras geram novo PBI num novo Épico.</li>
+    </ul>`
+  },
+  'pbi-b': {
+    title: 'PBI (na Opção B) — Nível 4 ✅ Definido',
+    body: `<ul>
+      <li>PBIs representam componentes individuais (ex: Gauge Chart v0, Line Chart v0).</li>
+      <li>Cada PBI é um incremento concreto e fechável — não fica aberto indefinidamente.</li>
+      <li>Ao concluir, o PBI é fechado. Evoluções futuras geram novo PBI num novo Épico.</li>
+    </ul>`
+  },
+  task: {
+    title: 'Task — Nível 5 ✅ Definido',
+    body: `<ul>
+      <li>Efêmera — nasce e morre dentro da sprint.</li>
+      <li>Granularidade máxima: 1 dia de trabalho.</li>
+      <li>Deve ter estimativa (Original Estimate em horas) preenchida.</li>
+      <li>Carry-over: ao mover um PBI de sprint, tasks abertas seguem; tasks fechadas ficam na sprint original.</li>
+    </ul>`
+  }
+};
+
+function showDetail(key) {
+  const d = details[key];
+  if (!d) return;
+  document.getElementById('detail-title').textContent = d.title;
+  document.getElementById('detail-body').innerHTML = d.body;
+  document.getElementById('detail-panel').classList.add('visible');
+}
+
+const configA = {
+  features: [
+    { title: 'Feature — Gauge Chart', desc: 'Componente individual', badge: 'Design System', cls: 'n-feature-comp', key: 'feature-a' },
+    { title: 'Feature — Data Access SDK', desc: 'Componente individual', badge: 'Backend', cls: 'n-feature-comp', key: 'feature-a' },
+    { title: 'Feature — Secret Mgmt', desc: 'Componente individual', badge: 'Backend', cls: 'n-feature-comp', key: 'feature-a' },
+  ],
+  pbis: [
+    { title: 'PBI', desc: 'Implementação da feature', badge: 'Entreg. técnico', cls: 'n-pbi', key: 'pbi-a' },
+    { title: 'PBI', desc: 'Testes e validação', badge: 'Entreg. técnico', cls: 'n-pbi', key: 'pbi-a' },
+    { title: 'PBI', desc: 'Documentação', badge: 'Entreg. técnico', cls: 'n-pbi', key: 'pbi-a' },
+  ],
+  featureLabel: '⚠️ Feature = componente individual'
+};
+
+const configB = {
+  features: [
+    { title: 'Feature — Charts', desc: 'Grupo de componentes', badge: 'Categoria', cls: 'n-feature-group', key: 'feature-b' },
+    { title: 'Feature — Inputs', desc: 'Grupo de componentes', badge: 'Categoria', cls: 'n-feature-group', key: 'feature-b' },
+    { title: 'Feature — Backend SDK', desc: 'Grupo de componentes', badge: 'Categoria', cls: 'n-feature-group', key: 'feature-b' },
+  ],
+  pbis: [
+    { title: 'PBI — Gauge Chart v0', desc: 'Componente individual', badge: 'Entregável', cls: 'n-pbi', key: 'pbi-b' },
+    { title: 'PBI — Input Field v0', desc: 'Componente individual', badge: 'Entregável', cls: 'n-pbi', key: 'pbi-b' },
+    { title: 'PBI — Data SDK v0', desc: 'Componente individual', badge: 'Entregável', cls: 'n-pbi', key: 'pbi-b' },
+  ],
+  featureLabel: '⚠️ Feature = grupo de componentes'
+};
+
+function renderNodes(containerId, items) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = items.map(n => `
+    <div class="node ${n.cls}" onclick="showDetail('${n.key}')">
+      <div class="node-title">${n.title}</div>
+      <div class="node-desc">${n.desc}</div>
+      <span class="node-badge">${n.badge}</span>
+    </div>`).join('');
+}
+
+function setMode(mode) {
+  const cfg = mode === 'A' ? configA : configB;
+  renderNodes('feature-row', cfg.features);
+  renderNodes('pbi-row', cfg.pbis);
+  document.getElementById('btn-a').classList.toggle('active', mode === 'A');
+  document.getElementById('btn-b').classList.toggle('active', mode === 'B');
+  document.getElementById('detail-panel').classList.remove('visible');
+}
+
+setMode('A');
+</script>
+</body>
+</html>
